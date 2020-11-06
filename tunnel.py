@@ -1,8 +1,17 @@
+'''
+
+	Created by Ícaro Freire on 22th October 2020.
+	São Paulo, BR.
+
+'''
+
 import socket
 from threading import Thread
+import importlib
+import sniffer
 
 class Receiver(Thread):
-	def __init__(self, host, port, n=1, title='Receiver'):
+	def __init__(self, host, port, n=1, title='Receiver', id=0):
 		super().__init__(None, self)
 		self.host		= host
 		self.port		= port
@@ -10,6 +19,7 @@ class Receiver(Thread):
 		self.title		= title
 		self.sock		= socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 		self.clients	= []
+		self.id			= id
 		return
     
 	def run(self):
@@ -28,7 +38,10 @@ class Receiver(Thread):
 			for client in self.clients:
 				data = client[0].recv(1024)
 				if data != b'':
+					importlib.reload(sniffer)
+					data = sniffer.sniff(data, source='R', id=self.id)
 					self.sender.send(data)
+					
 
 		self.accept_thread.join()
 
@@ -52,13 +65,15 @@ class Receiver(Thread):
 		return
 
 class Sender(Thread):
-	def __init__(self, host, port, title='Sender'):
+	def __init__(self, host, port, title='Sender', sniffer=None, id=0):
 		super().__init__(None, self)
 		self.host		= host
 		self.port 		= port
 		self.title		= title
 		self.sock		= socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 		self.is_ready	= False
+		self.id			= id
+		self.sniffer	= sniffer
 		return
     
 	def run(self):
@@ -73,6 +88,8 @@ class Sender(Thread):
 			data = self.sock.recv(1024)
 			if data != b'':
 				for client in self.clients:
+					importlib.reload(sniffer)
+					data = sniffer.sniff(data, source='R', id=self.id)
 					client[0].send(data)
 
 		return
@@ -87,10 +104,10 @@ class Sender(Thread):
 		return
 
 class Tunnel(Thread):
-	def __init__(self, begin=('127.0.0.1', 3000), end=('127.0.0.1', 3001), id=0):
+	def __init__(self, begin=('127.0.0.1', 3000), end=('127.0.0.1', 3001), sniffer=None, id=0):
 		super().__init__(None, self)
-		self.receiver   = Receiver(begin[0], begin[1], 1, 'Receiver {}'.format(id))
-		self.sender     = Sender(end[0], end[1], 'Sender {}'.format(id))
+		self.receiver   = Receiver(begin[0], begin[1], 1, 'Receiver {}'.format(id), id=id)
+		self.sender     = Sender(end[0], end[1], 'Sender {}'.format(id), id=id)
 		return
 
 	def run(self):
@@ -112,7 +129,7 @@ class Tunnel(Thread):
 		self.receiver.close()
 
 def main():
-	tunnel = Tunnel(('localhost', 25565), ('192.168.0.27', 25565))
+	tunnel = Tunnel(('localhost', 25565), ('jogar.loscraft.com.br', 25565))
 	tunnel.start()
 	return
 
