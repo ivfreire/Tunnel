@@ -9,6 +9,15 @@ import socket
 from threading import Thread
 import importlib
 import sniffer
+import sys
+
+
+FLAGS = {
+	'start':	('localhost', 25565),
+	'end':		None,
+	'log_path':	None
+}
+
 
 class Receiver(Thread):
 	def __init__(self, host, port, n=1, title='Receiver', id=0):
@@ -89,7 +98,7 @@ class Sender(Thread):
 			if data != b'':
 				for client in self.clients:
 					importlib.reload(sniffer)
-					data = sniffer.sniff(data, source='R', id=self.id)
+					data = sniffer.sniff(data, source='S', id=self.id)
 					client[0].send(data)
 
 		return
@@ -104,7 +113,7 @@ class Sender(Thread):
 		return
 
 class Tunnel(Thread):
-	def __init__(self, begin=('127.0.0.1', 3000), end=('127.0.0.1', 3001), sniffer=None, id=0):
+	def __init__(self, begin=('127.0.0.1', 3000), end=('127.0.0.1', 3001), sniffer=None, log_path=None, id=0):
 		super().__init__(None, self)
 		self.receiver   = Receiver(begin[0], begin[1], 1, 'Receiver {}'.format(id), id=id)
 		self.sender     = Sender(end[0], end[1], 'Sender {}'.format(id), id=id)
@@ -128,8 +137,22 @@ class Tunnel(Thread):
 		self.sender.close()
 		self.receiver.close()
 
+def treat_address(addr):
+	n_addr = str(addr).split(':')
+	if len(n_addr) == 1: n_addr += [25565]
+	else: n_addr[1] = int(n_addr[1])
+	return tuple(n_addr)
+
 def main():
-	tunnel = Tunnel(('localhost', 25565), ('jogar.loscraft.com.br', 25565))
+	for i in range(len(sys.argv)):
+		if (sys.argv[i] == '-t') or (sys.argv[i] == '--target'):
+			FLAGS['end'] = treat_address(sys.argv[i+1])
+		if sys.argv[i] == '-w':
+			FLAGS['log_path'] = sys.argv[i+1]
+
+	if FLAGS['end'] == None: return
+
+	tunnel = Tunnel(FLAGS['start'], FLAGS['end'], log_path=FLAGS['log_path'])
 	tunnel.start()
 	return
 

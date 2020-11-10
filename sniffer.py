@@ -1,5 +1,7 @@
 
 def sniff(data, source, id):
-	if source == 'R':
-		print(data)
+	try:
+		print('{}:\t{}'.format(source, data))
+	except Exception as e:
+		print(e)
 	return data
