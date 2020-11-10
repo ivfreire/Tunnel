@@ -1,21 +1,21 @@
 '''
-
 	Created by Ícaro Freire on 22th October 2020.
 	São Paulo, BR.
-
 '''
 
 import socket
-from threading import Thread
 import importlib
+from threading import Thread
+import sys, timeit
+
 import sniffer
-import sys
 
 
 FLAGS = {
-	'start':	('localhost', 25565),
-	'end':		None,
-	'log_path':	None
+	'start':			('localhost', 3000),
+	'end':				None,
+	'log_path':			None,
+	'timeout_limit':	30
 }
 
 
@@ -29,6 +29,8 @@ class Receiver(Thread):
 		self.sock		= socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 		self.clients	= []
 		self.id			= id
+
+		self.sock.settimeout(FLAGS['timeout_limit'])
 		return
     
 	def run(self):
@@ -43,16 +45,20 @@ class Receiver(Thread):
 		self.accept_thread = Thread(target=self.accept)
 		self.accept_thread.start()
 
-		while self.is_alive:
-			for client in self.clients:
-				data = client[0].recv(1024)
-				if data != b'':
-					importlib.reload(sniffer)
-					data = sniffer.sniff(data, source='R', id=self.id)
-					self.sender.send(data)
-					
-
+		try:
+			while self.is_alive:
+				for client in self.clients:
+					data = client[0].recv(1024)
+					if data != b'':
+						importlib.reload(sniffer)
+						data = sniffer.sniff(data, source='R', id=self.id)
+						self.sender.send(data)
+		except Exception as e:
+			print('Receiver Exception: {}'.format(e))
+		
 		self.accept_thread.join()
+
+		self.close()
 
 		return
 
@@ -71,6 +77,7 @@ class Receiver(Thread):
     
 	def close(self):
 		self.sock.close()
+		print('Receiver has closed the connection!')
 		return
 
 class Sender(Thread):
@@ -93,13 +100,20 @@ class Sender(Thread):
 			print('Exception: {}'.format(e))
 			return
 
-		while self.is_alive:
-			data = self.sock.recv(1024)
-			if data != b'':
-				for client in self.clients:
-					importlib.reload(sniffer)
-					data = sniffer.sniff(data, source='S', id=self.id)
-					client[0].send(data)
+		try:
+			while self.is_alive:
+				data = self.sock.recv(1024)
+				if data != b'':
+					for client in self.clients:
+						importlib.reload(sniffer)
+						data = sniffer.sniff(data, source='S', id=self.id)
+						client[0].send(data)
+		except Exception as e:
+			print('Sender Exception: {}'.format(e))
+		
+
+		self.is_alive = False
+		self.close()
 
 		return
     
@@ -110,6 +124,7 @@ class Sender(Thread):
     
 	def close(self):
 		self.sock.close()
+		print('Sender has closed connection.')
 		return
 
 class Tunnel(Thread):
@@ -129,8 +144,10 @@ class Tunnel(Thread):
 		except Exception as e:
 			print('Exception: {}'.format(e))
 
-		self.receiver.join()
 		self.sender.join()
+		self.receiver.is_alive = False
+
+		self.receiver.join()
 		return
 
 	def close(self):
@@ -145,6 +162,8 @@ def treat_address(addr):
 
 def main():
 	for i in range(len(sys.argv)):
+		if (sys.argv[i] == '-e') or (sys.argv[i] == '--entrance'):
+			FLAGS['start'] = treat_address(sys.argv[i+1])
 		if (sys.argv[i] == '-t') or (sys.argv[i] == '--target'):
 			FLAGS['end'] = treat_address(sys.argv[i+1])
 		if sys.argv[i] == '-w':
